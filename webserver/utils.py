@@ -678,7 +678,7 @@ def load_translator(lang_code='no'):
     Usage: t = load_translator('no') or t = load_translator('en')
     """
     fname = f'strings.{lang_code}.json'
-    path = os.path.join(os.path.dirname(__file__), fname)
+    path = os.path.join(os.path.dirname(__file__),'strings', fname)
     with open(path, encoding='utf-8') as f:
         STRINGS = json.load(f)
     def t(*keys):
