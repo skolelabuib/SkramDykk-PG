@@ -320,6 +320,10 @@ class DownloadFrontend:
             State("parameter-checklist", "value"),
             State("download-format-radio", "value"),
             prevent_initial_call=True,
+            running=[
+                (Output("download-button", "children"), dbc.Spinner(size="sm", color="light"), t('accordion', 'download_data')),
+                (Output("download-button", "disabled"), True, False),
+            ],
         )
         def func_download_resampled_data(n_clicks, start_date, end_date, depth_range,
                                          resampling_interval, depth_aggregation, parameters, download_format):
@@ -379,6 +383,10 @@ class DownloadFrontend:
             State("surface-parameter-checklist", "value"),
             State("surface-download-format-radio", "value"),
             prevent_initial_call=True,
+            running=[
+                (Output("download-surface-button", "children"), dbc.Spinner(size="sm", color="light"), t('accordion', 'download_surface_data')),
+                (Output("download-surface-button", "disabled"), True, False),
+            ],
         )
         def func_download_surface_data(n_clicks, start_date, end_date,
                                        resampling_interval, parameters, download_format):
@@ -422,6 +430,10 @@ class DownloadFrontend:
             State("date-picker-range", "end_date"),
             State("raw-download-format-radio", "value"),
             prevent_initial_call=True,
+            running=[
+                (Output("download-raw-button", "children"), dbc.Spinner(size="sm", color="light"), t('accordion', 'download_raw_data')),
+                (Output("download-raw-button", "disabled"), True, False),
+            ],
         )
         def func_download_raw_data(n_clicks, start_date, end_date, download_format):
             if not n_clicks:
