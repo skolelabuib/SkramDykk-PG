@@ -1,6 +1,6 @@
-import io
 import numpy as np
 import pandas as pd
+import io # Added import
 import plotly.graph_objects as go
 from dash import Dash, dcc, html, Input, Output, State, callback_context, no_update
 import dash_bootstrap_components as dbc
@@ -31,6 +31,7 @@ class DownloadFrontend:
         self.dbconn = dbconn
         self.language = language
         self.requests_pathname_prefix = requests_pathname_prefix
+        self.use_split_profile_excel = True # Excel format for download; fixed for now
         self.setup_language(language)
         self.app = Dash(__name__,
                         requests_pathname_prefix=self.requests_pathname_prefix,
@@ -84,11 +85,12 @@ class DownloadFrontend:
         self.app.layout = dbc.Container([
             dbc.Row([
                 dbc.Col(dbc.NavbarSimple(
-                    children=[
-                        dbc.NavItem(dbc.NavLink(t('navbar', 'home'), href="#")),
-                        dbc.NavItem(dbc.NavLink(t('navbar', 'about'), href="#")),
-                        dbc.NavItem(dbc.NavLink(t('navbar', 'contact'), href="#")),
-                    ],
+                    # Drop these for now
+                    # children=[
+                    #    dbc.NavItem(dbc.NavLink(t('navbar', 'home'), href="#")),
+                    #    dbc.NavItem(dbc.NavLink(t('navbar', 'about'), href="#")),
+                    #    dbc.NavItem(dbc.NavLink(t('navbar', 'contact'), href="#")),
+                    # ],
                     brand=t('navbar', 'brand'),
                     brand_href="#",
                     color="primary",
@@ -272,6 +274,34 @@ class DownloadFrontend:
             ]),
         ], fluid=True)
 
+    def split_profile_dataframe(self, df):
+        """
+        Given a DataFrame with columns ['ts', 'pressure_dbar', ...], returns a dict mapping each variable name t
+        o a DataFrame with index 'ts' and columns as unique 'pressure_dbar' values.
+        Handles cases where 'ts' is the index instead of a column.
+        Uses translated parameter names for sheet names and for the time column, and translates pressure units for column headers.
+        """
+        variables = list(self.parameters_dict.keys()) 
+        result = {}
+        translated_unit_dbar = self.t('units', 'dbar') # Get translated unit once
+        # Make a copy to avoid modifying the original
+        df_work = df.copy()
+        # Make sure 'ts' is a column, not just an index
+        if 'ts' not in df_work.columns and df_work.index.name == 'ts':
+            df_work = df_work.reset_index()
+        # Now handle each parameter
+        for var in variables:
+            if var in df_work.columns:
+                # Create a pivot table for the variable
+                pivoted = pd.pivot_table(df_work, index='ts', columns='pressure_dbar', values=var)
+                pivoted.columns = [f"{str(col)} {translated_unit_dbar}" for col in pivoted.columns]
+                pivoted = pivoted.reset_index()
+                pivoted = pivoted.rename(columns={'ts': self.t('excel_headers', 'time')})
+                sheet_name = self.parameters_dict[var]
+                result[sheet_name] = pivoted
+        
+        return result
+
     def setup_callbacks(self):
         """
         Register Dash callbacks for interactivity and data download.
@@ -311,7 +341,29 @@ class DownloadFrontend:
                 return dcc.send_data_frame(df_to_download.to_csv, filename=filename)
             elif download_format == 'xlsx':
                 buffer = io.BytesIO()
-                df_to_download.to_excel(buffer, index=True, sheet_name='Resampled Data')
+            
+                if getattr(self, 'use_split_profile_excel', True):
+                    param_dfs = self.split_profile_dataframe(df_to_download)
+                    # with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                        for sheet_name, df in param_dfs.items():
+                            df.to_excel(writer, sheet_name=sheet_name, index=False)
+                else:
+                    columns_orig = df_to_download.columns.tolist()
+                    columns_to_rename_map = {}
+                    for col in df_to_download.columns:
+                        if col == 'ts':
+                            columns_to_rename_map[col] = self.t('excel_headers', 'time')
+                        elif col == 'pressure_dbar':
+                            columns_to_rename_map[col] = self.t('excel_headers', 'pressure_dbar')
+                        elif col in self.parameters_dict:
+                            columns_to_rename_map[col] = self.parameters_dict[col]
+                        else:
+                            columns_to_rename_map[col] = col
+                    translated_headers = [columns_to_rename_map.get(col, col) for col in columns_orig]
+                    # Translate index names 
+                    index_labels = [self.t('excel_headers', name) for name in df_to_download.index.names if name]
+                    df_to_download.to_excel(buffer, index=True, index_label = index_labels, sheet_name=self.t('sheet_names', 'resampled_data'), header=translated_headers)
                 buffer.seek(0)
                 return dcc.send_bytes(buffer.getvalue(), filename=filename)
             else:
@@ -346,7 +398,19 @@ class DownloadFrontend:
                 return dcc.send_data_frame(df_to_download.to_csv, filename=filename)
             elif download_format == 'xlsx':
                 buffer = io.BytesIO()
-                df_to_download.to_excel(buffer, index=True, sheet_name='Surface Data')
+                # Prepare translated headers for Excel
+                columns_to_rename_map = {}
+                columns_orig = df_to_download.columns.tolist()
+                for col in df_to_download.columns:
+                    if col == 'ts':
+                        columns_to_rename_map[col] = self.t('excel_headers', 'time')
+                    elif col in self.surface_parameters_dict:
+                        columns_to_rename_map[col] = self.surface_parameters_dict[col]
+                    else:
+                        columns_to_rename_map[col] = col
+
+                translated_headers = [columns_to_rename_map.get(col, col) for col in columns_orig]
+                df_to_download.to_excel(buffer, index=True, index_label=self.t('excel_headers',df_to_download.index.name),  sheet_name=self.t('sheet_names', 'surface_data'), header=translated_headers)
                 buffer.seek(0)
                 return dcc.send_bytes(buffer.getvalue(), filename=filename)
             return no_update
@@ -407,7 +471,8 @@ class DownloadFrontend:
                 return dcc.send_bytes(buffer.getvalue(), filename=xlsx_filename)
             return no_update
 
-        # --- Graph and date picker update callback ---
+        # Graph and date picker update callback 
+        # Complex to handle both graph updates, slider updates and date picker changes
         @app.callback(
             Output('time-series-graph', 'figure'),
             Output('date-picker-range', 'start_date'),

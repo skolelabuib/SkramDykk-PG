@@ -681,9 +681,21 @@ def load_translator(lang_code='no'):
     path = os.path.join(os.path.dirname(__file__),'strings', fname)
     with open(path, encoding='utf-8') as f:
         STRINGS = json.load(f)
+    
     def t(*keys):
-        d = STRINGS
-        for k in keys:
-            d = d[k]
-        return d
+        try:
+            d = STRINGS
+            for k in keys:
+                if k not in d:
+                    # Return the last key as fallback when key is not found
+                    print(f"Warning: Missing translation key: '{keys}'. Using raw key as fallback.")
+                    return keys[-1]
+                d = d[k]
+            return d
+        except (KeyError, TypeError):
+            # Return the last key as fallback when any exception occurs
+            print(f"Warning: Error accessing translation key: '{keys}'. Using raw key as fallback.")
+            return keys[-1]
+            
     return t
+

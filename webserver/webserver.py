@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, jsonify, Response, request
+from flask import Flask, jsonify, Response
 from flask import render_template, send_from_directory
-from flask_cors import CORS, cross_origin
-from datetime import datetime, timedelta
-from bson import json_util
 import json
 import plotly
 import os
@@ -25,7 +22,7 @@ global_prefix = os.environ.get('SCRIPT_NAME', '').rstrip('/')
 download_frontend_no = DownloadFrontend(PGCONN, language='no', requests_pathname_prefix = global_prefix + '/download/')
 download_frontend_en = DownloadFrontend(PGCONN, language='en', requests_pathname_prefix = global_prefix + '/download/en/')
 
-# Remember no trailing slashes!
+# NB no trailing slashes
 app.wsgi_app = DispatcherMiddleware(
     app.wsgi_app, {
     '/download': download_frontend_no.app.server,  
